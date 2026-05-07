@@ -7,10 +7,14 @@
     "generator": ">=3.0.0"
   },
   "scripts": {
-    "gen:account": "asyncapi generate fromTemplate examples/account.aas.yaml . -o generated --force-write --no-interactive"
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "gen:account": "npm run build && asyncapi generate fromTemplate examples/account.aas.yaml . -o generated --force-write --no-interactive"
   },
   "devDependencies": {
-    "@asyncapi/cli": "^6.0.0"
+    "@asyncapi/cli": "^6.0.0",
+    "@types/react": "^18",
+    "typescript": "~5.9.3"
   },
   "dependencies": {
     "@asyncapi/generator-react-sdk": "^1.1.3",
