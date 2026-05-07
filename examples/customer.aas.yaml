@@ -1,0 +1,91 @@
+asyncapi: 3.1.0
+
+info:
+  title: Customer Service Events
+  version: 1.0.0
+  description: Async events published by customer-service via AWS SNS
+
+servers:
+  production:
+    host: sns.eu-north-1.amazonaws.com
+    protocol: sns
+    description: AWS SNS in eu-north-1
+
+channels:
+  customerCreated:
+    address: CustomerCreatedTopic
+    description: Published when a customer is created (SNS Subject = customer.created)
+    servers:
+      - $ref: '#/servers/production'
+    messages:
+      customerCreated:
+        $ref: '#/components/messages/CustomerCreated'
+
+  customerDeleted:
+    address: CustomerDeletedTopic
+    description: Published when a customer is deleted (SNS Subject = customer.deleted)
+    servers:
+      - $ref: '#/servers/production'
+    messages:
+      customerDeleted:
+        $ref: '#/components/messages/CustomerDeleted'
+
+operations:
+  sendCustomerCreated:
+    action: send
+    channel:
+      $ref: '#/channels/customerCreated'
+    summary: Publish when a customer is created
+
+  sendCustomerDeleted:
+    action: send
+    channel:
+      $ref: '#/channels/customerDeleted'
+    summary: Publish when a customer is deleted
+
+components:
+  messages:
+    CustomerCreated:
+      name: CustomerCreated
+      summary: Full customer object after creation
+      x-sns-subject: customer.created
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/Customer'
+
+    CustomerDeleted:
+      name: CustomerDeleted
+      summary: Reference to the deleted customer
+      x-sns-subject: customer.deleted
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CustomerDeleted'
+
+  schemas:
+    Customer:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - email
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+
+    CustomerDeleted:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The ID of the deleted customer

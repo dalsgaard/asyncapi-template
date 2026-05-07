@@ -1,0 +1,161 @@
+asyncapi: 3.0.0
+
+info:
+  title: Account Service Events
+  version: 1.0.0
+  description: Async events published and consumed by account-service via AWS SNS
+
+servers:
+  production:
+    host: sns.eu-north-1.amazonaws.com
+    protocol: sns
+    description: AWS SNS in eu-north-1
+
+channels:
+  accountCreated:
+    address: AccountCreatedTopic
+    description: Published when an account is created
+    servers:
+      - $ref: '#/servers/production'
+    messages:
+      accountCreated:
+        $ref: '#/components/messages/AccountCreated'
+
+  accountUpdated:
+    address: AccountUpdatedTopic
+    description: Published when an account is updated (SNS Subject = account.updated)
+    servers:
+      - $ref: '#/servers/production'
+    messages:
+      accountUpdated:
+        $ref: '#/components/messages/AccountUpdated'
+
+  accountDeleted:
+    address: AccountDeletedTopic
+    description: Published when an account is deleted (SNS Subject = account.deleted)
+    servers:
+      - $ref: '#/servers/production'
+    messages:
+      accountDeleted:
+        $ref: '#/components/messages/AccountDeleted'
+
+  customerDeleted:
+    address: CustomerDeletedTopic
+    description: Consumed from customer-service when a customer is deleted
+    servers:
+      - $ref: '#/servers/production'
+    messages:
+      customerDeleted:
+        $ref: '#/components/messages/CustomerDeleted'
+
+operations:
+  sendAccountCreated:
+    action: send
+    channel:
+      $ref: '#/channels/accountCreated'
+    summary: Publish when an account is created
+
+  sendAccountUpdated:
+    action: send
+    channel:
+      $ref: '#/channels/accountUpdated'
+    summary: Publish when an account is updated
+
+  sendAccountDeleted:
+    action: send
+    channel:
+      $ref: '#/channels/accountDeleted'
+    summary: Publish when an account is deleted
+
+  receiveCustomerDeleted:
+    action: receive
+    channel:
+      $ref: '#/channels/customerDeleted'
+    summary: Cascade-delete all accounts belonging to the deleted customer
+
+components:
+  messages:
+    AccountCreated:
+      name: AccountCreated
+      summary: Full account object after creation
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/Account'
+
+    AccountUpdated:
+      name: AccountUpdated
+      summary: Full account object after update
+      x-sns-subject: account.updated
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/Account'
+
+    AccountDeleted:
+      name: AccountDeleted
+      summary: Reference to the deleted account
+      x-sns-subject: account.deleted
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/AccountDeleted'
+
+    CustomerDeleted:
+      name: CustomerDeleted
+      summary: Reference to the deleted customer
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CustomerDeleted'
+
+  schemas:
+    Account:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - iban
+        - currency
+        - customerId
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        iban:
+          type: string
+          pattern: '^[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}$'
+          minLength: 15
+          maxLength: 34
+          examples:
+            - DK5000400440116243
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          pattern: '^[A-Z]{3}$'
+          examples:
+            - DKK
+        customerId:
+          type: string
+          format: uuid
+
+    AccountDeleted:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The ID of the deleted account
+
+    CustomerDeleted:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The ID of the deleted customer
