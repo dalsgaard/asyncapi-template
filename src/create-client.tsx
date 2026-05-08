@@ -32,7 +32,7 @@ type AsyncAPIDocument = {
 }
 
 function toSlug(title: string): string {
-  return title.toLowerCase().replace(/\bevents\b/g, '').trim().replace(/\s+/g, '-');
+  return title.toLowerCase().replace(/\s+/g, '-');
 }
 
 function slugToPascalCase(slug: string): string {

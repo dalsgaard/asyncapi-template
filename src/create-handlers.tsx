@@ -24,7 +24,7 @@ function stripActionPrefix(name: string): string {
 }
 
 function toSlug(title: string): string {
-  return title.toLowerCase().replace(/\bevents\b/g, '').trim().replace(/\s+/g, '-');
+  return title.toLowerCase().replace(/\s+/g, '-');
 }
 
 function toModuleName(title: string): string {

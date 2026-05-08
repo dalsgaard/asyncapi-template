@@ -10,9 +10,9 @@ import {
   factory,
   SyntaxKind,
   addSyntheticLeadingComment,
-  TypeAliasDeclaration,
-  ParameterDeclaration,
-  Node,
+  type TypeAliasDeclaration,
+  type ParameterDeclaration,
+  type Node,
 } from 'typescript';
 
 type Message = {
@@ -95,7 +95,7 @@ function createTypesFile(
 const FileWithChildren = File as React.FC<FileProps & { children?: string }>;
 
 function toFilename(title: string): string {
-  return title.toLowerCase().replace(/\bevents\b/g, '').trim().replace(/\s+/g, '-') + '.d.ts';
+  return title.toLowerCase().replace(/\s+/g, '-') + '.d.ts';
 }
 
 export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
