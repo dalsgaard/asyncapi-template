@@ -1,7 +1,17 @@
 import { File, type FileProps } from '@asyncapi/generator-react-sdk';
 import React from 'react';
+import {
+  createPrinter,
+  EmitHint,
+  NewLineKind,
+  NodeFlags,
+  factory,
+  SyntaxKind,
+  type Statement,
+} from 'typescript';
 
 const FileWithChildren = File as React.FC<FileProps & { children?: string }>;
+const printer = createPrinter({ newLine: NewLineKind.LineFeed });
 
 type Message = {
   'x-sns-subject'?: string;
@@ -45,52 +55,131 @@ function getSnsSubject(op: Operation): string | undefined {
   return Object.values(op.channel?.messages ?? {})[0]?.['x-sns-subject'];
 }
 
-function generateFile(slug: string, sendOps: [string, Operation][], typesModule: string): string {
-  const clientType = slugToPascalCase(slug) + 'Client';
-  const configType = slugToPascalCase(slug) + 'ClientConfig';
-  const typeNames = sendOps.map(([name]) => toPascalCase(name));
+function buildImports(typeNames: string[], typesModule: string): Statement[] {
+  const namedImport = (name: string) =>
+    factory.createImportSpecifier(false, undefined, factory.createIdentifier(name));
 
-  const configFields = sendOps.map(([name]) => {
-    const stripped = stripActionPrefix(name);
-    return `  ${toCamelCase(stripped)}TopicArn: string;`;
-  });
+  return [
+    factory.createImportDeclaration(
+      undefined,
+      factory.createImportClause(false, undefined, factory.createNamedImports([
+        namedImport('SNSClient'),
+        namedImport('PublishCommand'),
+      ])),
+      factory.createStringLiteral('@aws-sdk/client-sns'),
+    ),
+    factory.createImportDeclaration(
+      undefined,
+      factory.createImportClause(false, undefined, factory.createNamedImports(
+        typeNames.map(namedImport),
+      )),
+      factory.createStringLiteral(typesModule),
+    ),
+  ];
+}
 
-  const lines: string[] = [
-    `import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";`,
-    `import { ${typeNames.join(', ')} } from "${typesModule}";`,
-    ``,
-    `export type ${configType} = {`,
-    ...configFields,
-    `};`,
-    ``,
-    `export type ${clientType} = {`,
-    ...sendOps.map(([name]) => `  ${name}: ${toPascalCase(name)};`),
-    `};`,
-    ``,
-    `export function create${clientType}(sns: SNSClient, config: ${configType}): ${clientType} {`,
-    `  return {`,
+function buildConfigType(name: string, sendOps: [string, Operation][]): Statement {
+  return factory.createTypeAliasDeclaration(
+    [factory.createToken(SyntaxKind.ExportKeyword)],
+    name,
+    undefined,
+    factory.createTypeLiteralNode(
+      sendOps.map(([opName]) => factory.createPropertySignature(
+        undefined,
+        factory.createIdentifier(toCamelCase(stripActionPrefix(opName)) + 'TopicArn'),
+        undefined,
+        factory.createKeywordTypeNode(SyntaxKind.StringKeyword),
+      )),
+    ),
+  );
+}
+
+function buildClientType(name: string, sendOps: [string, Operation][]): Statement {
+  return factory.createTypeAliasDeclaration(
+    [factory.createToken(SyntaxKind.ExportKeyword)],
+    name,
+    undefined,
+    factory.createTypeLiteralNode(
+      sendOps.map(([opName]) => factory.createPropertySignature(
+        undefined,
+        factory.createIdentifier(opName),
+        undefined,
+        factory.createTypeReferenceNode(factory.createIdentifier(toPascalCase(opName))),
+      )),
+    ),
+  );
+}
+
+function buildMethodArrow(op: Operation, param: string, configField: string) {
+  const publishArgs = [
+    factory.createPropertyAssignment(
+      'TopicArn',
+      factory.createPropertyAccessExpression(factory.createIdentifier('config'), configField),
+    ),
+    factory.createPropertyAssignment(
+      'Message',
+      factory.createCallExpression(
+        factory.createPropertyAccessExpression(factory.createIdentifier('JSON'), 'stringify'),
+        undefined,
+        [factory.createIdentifier(param)],
+      ),
+    ),
   ];
 
-  for (const [name, op] of sendOps) {
-    const stripped = stripActionPrefix(name);
-    const param = toCamelCase(stripped);
-    const configField = `${toCamelCase(stripped)}TopicArn`;
-    const subject = getSnsSubject(op);
-
-    lines.push(`    ${name}: async (${param}) => {`);
-    lines.push(`      await sns.send(new PublishCommand({`);
-    lines.push(`        TopicArn: config.${configField},`);
-    lines.push(`        Message: JSON.stringify(${param}),`);
-    if (subject) lines.push(`        Subject: '${subject}',`);
-    lines.push(`      }));`);
-    lines.push(`    },`);
+  const subject = getSnsSubject(op);
+  if (subject) {
+    publishArgs.push(factory.createPropertyAssignment('Subject', factory.createStringLiteral(subject)));
   }
 
-  lines.push(`  };`);
-  lines.push(`}`);
-  lines.push(``);
+  const awaitSend = factory.createAwaitExpression(
+    factory.createCallExpression(
+      factory.createPropertyAccessExpression(factory.createIdentifier('sns'), 'send'),
+      undefined,
+      [factory.createNewExpression(
+        factory.createIdentifier('PublishCommand'),
+        undefined,
+        [factory.createObjectLiteralExpression(publishArgs, true)],
+      )],
+    ),
+  );
 
-  return lines.join('\n');
+  return factory.createArrowFunction(
+    [factory.createToken(SyntaxKind.AsyncKeyword)],
+    undefined,
+    [factory.createParameterDeclaration(undefined, undefined, param)],
+    undefined,
+    factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+    factory.createBlock([factory.createExpressionStatement(awaitSend)], true),
+  );
+}
+
+function buildFactoryFunction(clientType: string, configType: string, sendOps: [string, Operation][]): Statement {
+  const params = [
+    factory.createParameterDeclaration(undefined, undefined, 'sns', undefined, factory.createTypeReferenceNode('SNSClient')),
+    factory.createParameterDeclaration(undefined, undefined, 'config', undefined, factory.createTypeReferenceNode(configType)),
+  ];
+
+  const properties = sendOps.map(([name, op]) => {
+    const param = toCamelCase(stripActionPrefix(name));
+    return factory.createPropertyAssignment(name, buildMethodArrow(op, param, param + 'TopicArn'));
+  });
+
+  return factory.createFunctionDeclaration(
+    [factory.createToken(SyntaxKind.ExportKeyword)],
+    undefined,
+    'create' + clientType,
+    undefined,
+    params,
+    factory.createTypeReferenceNode(clientType),
+    factory.createBlock([
+      factory.createReturnStatement(factory.createObjectLiteralExpression(properties, true)),
+    ], true),
+  );
+}
+
+function printFile(statements: Statement[]): string {
+  const sourceFile = factory.createSourceFile(statements, factory.createToken(SyntaxKind.EndOfFileToken), NodeFlags.None);
+  return printer.printNode(EmitHint.Unspecified, sourceFile, sourceFile);
 }
 
 export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
@@ -101,9 +190,20 @@ export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
 
   if (sendOps.length === 0) return [];
 
+  const clientType = slugToPascalCase(slug) + 'Client';
+  const configType = clientType + 'Config';
+  const typeNames = sendOps.map(([name]) => toPascalCase(name));
+
+  const statements: Statement[] = [
+    ...buildImports(typeNames, `./${slug}`),
+    buildConfigType(configType, sendOps),
+    buildClientType(clientType, sendOps),
+    buildFactoryFunction(clientType, configType, sendOps),
+  ];
+
   return [
     <FileWithChildren name={`${slug}-client.ts`}>
-      {`// Generated — do not edit manually\n\n${generateFile(slug, sendOps, `./${slug}`)}`}
+      {`// Generated — do not edit manually\n\n${printFile(statements)}`}
     </FileWithChildren>,
   ];
 }
