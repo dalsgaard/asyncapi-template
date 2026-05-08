@@ -82,6 +82,7 @@ function printFile(nodes: TypeAliasDeclaration[]): string {
 }
 
 function createTypesFile(
+  clientTypeName: string,
   schemas: Record<string, unknown>,
   sendOps: [string, Operation][],
   receiveOps: [string, Operation][],
@@ -89,18 +90,44 @@ function createTypesFile(
   const schemaNodes = Object.entries(schemas).map(([name, schema]) => createSchemaAst(name, schema));
   const sendTypeNodes = sendOps.map(([id, op]) => createOperationAst(id, op));
   const receiveTypeNodes = receiveOps.map(([id, op]) => createOperationAst(id, op));
-  return printFile([...schemaNodes, ...sendTypeNodes, ...receiveTypeNodes]);
+  const clientTypeNode = createClientTypeAst(clientTypeName, sendOps);
+  return printFile([...schemaNodes, ...sendTypeNodes, ...receiveTypeNodes, clientTypeNode]);
 }
 
 const FileWithChildren = File as React.FC<FileProps & { children?: string }>;
 
-function toFilename(title: string): string {
-  return title.toLowerCase().replace(/\s+/g, '-') + '.d.ts';
+function toSlug(title: string): string {
+  return title.toLowerCase().replace(/\s+/g, '-');
+}
+
+function slugToPascalCase(slug: string): string {
+  return slug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+}
+
+function toPascalCase(str: string): string {
+  return str.replace(/^[a-z]/, (m) => m.toUpperCase());
+}
+
+function createClientTypeAst(name: string, sendOps: [string, Operation][]): TypeAliasDeclaration {
+  return factory.createTypeAliasDeclaration(
+    [factory.createToken(SyntaxKind.ExportKeyword)],
+    name,
+    undefined,
+    factory.createTypeLiteralNode(
+      sendOps.map(([opName]) => factory.createPropertySignature(
+        undefined,
+        factory.createIdentifier(opName),
+        undefined,
+        factory.createTypeReferenceNode(factory.createIdentifier(toPascalCase(opName))),
+      )),
+    ),
+  );
 }
 
 export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
   const raw = asyncapi.json();
-  const filename = toFilename(raw.info?.title ?? 'asyncapi');
+  const slug = toSlug(raw.info?.title ?? 'asyncapi');
+  const clientTypeName = slugToPascalCase(slug) + 'Client';
   const schemas = raw.components?.schemas ?? {};
   const operations = Object.entries(raw.operations ?? {}) as [string, Operation][];
 
@@ -108,8 +135,8 @@ export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
   const receiveOps = operations.filter(([, op]) => op.action === 'receive');
 
   return [
-    <FileWithChildren name={filename}>
-      {`// Generated — do not edit manually\n\n${createTypesFile(schemas, sendOps, receiveOps)}\n`}
+    <FileWithChildren name={`${slug}.d.ts`}>
+      {`// Generated — do not edit manually\n\n${createTypesFile(clientTypeName, schemas, sendOps, receiveOps)}\n`}
     </FileWithChildren>,
   ];
 }

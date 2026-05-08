@@ -24,24 +24,35 @@ function printFile(nodes) {
     const sourceFileNode = factory.createSourceFile(nodes, factory.createToken(SyntaxKind.EndOfFileToken), NodeFlags.None);
     return printer.printNode(EmitHint.Unspecified, sourceFileNode, sourceFileNode);
 }
-function createTypesFile(schemas, sendOps, receiveOps) {
+function createTypesFile(clientTypeName, schemas, sendOps, receiveOps) {
     const schemaNodes = Object.entries(schemas).map(([name, schema]) => createSchemaAst(name, schema));
     const sendTypeNodes = sendOps.map(([id, op]) => createOperationAst(id, op));
     const receiveTypeNodes = receiveOps.map(([id, op]) => createOperationAst(id, op));
-    return printFile([...schemaNodes, ...sendTypeNodes, ...receiveTypeNodes]);
+    const clientTypeNode = createClientTypeAst(clientTypeName, sendOps);
+    return printFile([...schemaNodes, ...sendTypeNodes, ...receiveTypeNodes, clientTypeNode]);
 }
 const FileWithChildren = File;
-function toFilename(title) {
-    return title.toLowerCase().replace(/\s+/g, '-') + '.d.ts';
+function toSlug(title) {
+    return title.toLowerCase().replace(/\s+/g, '-');
+}
+function slugToPascalCase(slug) {
+    return slug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+}
+function toPascalCase(str) {
+    return str.replace(/^[a-z]/, (m) => m.toUpperCase());
+}
+function createClientTypeAst(name, sendOps) {
+    return factory.createTypeAliasDeclaration([factory.createToken(SyntaxKind.ExportKeyword)], name, undefined, factory.createTypeLiteralNode(sendOps.map(([opName]) => factory.createPropertySignature(undefined, factory.createIdentifier(opName), undefined, factory.createTypeReferenceNode(factory.createIdentifier(toPascalCase(opName)))))));
 }
 export default function ({ asyncapi }) {
     const raw = asyncapi.json();
-    const filename = toFilename(raw.info?.title ?? 'asyncapi');
+    const slug = toSlug(raw.info?.title ?? 'asyncapi');
+    const clientTypeName = slugToPascalCase(slug) + 'Client';
     const schemas = raw.components?.schemas ?? {};
     const operations = Object.entries(raw.operations ?? {});
     const sendOps = operations.filter(([, op]) => op.action === 'send');
     const receiveOps = operations.filter(([, op]) => op.action === 'receive');
     return [
-        _jsx(FileWithChildren, { name: filename, children: `// Generated — do not edit manually\n\n${createTypesFile(schemas, sendOps, receiveOps)}\n` }),
+        _jsx(FileWithChildren, { name: `${slug}.d.ts`, children: `// Generated — do not edit manually\n\n${createTypesFile(clientTypeName, schemas, sendOps, receiveOps)}\n` }),
     ];
 }

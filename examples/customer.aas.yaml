@@ -1,7 +1,7 @@
 asyncapi: 3.1.0
 
 info:
-  title: Customer Service Events
+  title: Customer Service
   version: 1.0.0
   description: Async events published by customer-service via AWS SNS
 

@@ -9,9 +9,6 @@ function toSlug(title) {
 function slugToPascalCase(slug) {
     return slug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('');
 }
-function toPascalCase(str) {
-    return str.replace(/^[a-z]/, (m) => m.toUpperCase());
-}
 function stripActionPrefix(name) {
     return name.replace(/^(send|receive)/i, '');
 }
@@ -34,9 +31,6 @@ function buildImports(typeNames, typesModule) {
 function buildConfigType(name, sendOps) {
     return factory.createTypeAliasDeclaration([factory.createToken(SyntaxKind.ExportKeyword)], name, undefined, factory.createTypeLiteralNode(sendOps.map(([opName]) => factory.createPropertySignature(undefined, factory.createIdentifier(toCamelCase(stripActionPrefix(opName)) + 'TopicArn'), undefined, factory.createKeywordTypeNode(SyntaxKind.StringKeyword)))));
 }
-function buildClientType(name, sendOps) {
-    return factory.createTypeAliasDeclaration([factory.createToken(SyntaxKind.ExportKeyword)], name, undefined, factory.createTypeLiteralNode(sendOps.map(([opName]) => factory.createPropertySignature(undefined, factory.createIdentifier(opName), undefined, factory.createTypeReferenceNode(factory.createIdentifier(toPascalCase(opName)))))));
-}
 function buildMethodArrow(op, param, configField) {
     const publishArgs = [
         factory.createPropertyAssignment('TopicArn', factory.createPropertyAccessExpression(factory.createIdentifier('config'), configField)),
@@ -50,15 +44,17 @@ function buildMethodArrow(op, param, configField) {
     return factory.createArrowFunction([factory.createToken(SyntaxKind.AsyncKeyword)], undefined, [factory.createParameterDeclaration(undefined, undefined, param)], undefined, factory.createToken(SyntaxKind.EqualsGreaterThanToken), factory.createBlock([factory.createExpressionStatement(awaitSend)], true));
 }
 function buildFactoryFunction(clientType, configType, sendOps) {
-    const params = [
-        factory.createParameterDeclaration(undefined, undefined, 'sns', undefined, factory.createTypeReferenceNode('SNSClient')),
-        factory.createParameterDeclaration(undefined, undefined, 'config', undefined, factory.createTypeReferenceNode(configType)),
-    ];
+    const snsDecl = factory.createVariableStatement(undefined, factory.createVariableDeclarationList([
+        factory.createVariableDeclaration('sns', undefined, undefined, factory.createNewExpression(factory.createIdentifier('SNSClient'), undefined, [
+            factory.createObjectLiteralExpression([]),
+        ])),
+    ], NodeFlags.Const));
     const properties = sendOps.map(([name, op]) => {
         const param = toCamelCase(stripActionPrefix(name));
         return factory.createPropertyAssignment(name, buildMethodArrow(op, param, param + 'TopicArn'));
     });
-    return factory.createFunctionDeclaration([factory.createToken(SyntaxKind.ExportKeyword)], undefined, 'create' + clientType, undefined, params, factory.createTypeReferenceNode(clientType), factory.createBlock([
+    return factory.createFunctionDeclaration([factory.createToken(SyntaxKind.ExportKeyword)], undefined, 'create' + clientType, undefined, [factory.createParameterDeclaration(undefined, undefined, 'config', undefined, factory.createTypeReferenceNode(configType))], factory.createTypeReferenceNode(clientType), factory.createBlock([
+        snsDecl,
         factory.createReturnStatement(factory.createObjectLiteralExpression(properties, true)),
     ], true));
 }
@@ -75,11 +71,9 @@ export default function ({ asyncapi }) {
         return [];
     const clientType = slugToPascalCase(slug) + 'Client';
     const configType = clientType + 'Config';
-    const typeNames = sendOps.map(([name]) => toPascalCase(name));
     const statements = [
-        ...buildImports(typeNames, `./${slug}`),
+        ...buildImports([clientType], `./${slug}`),
         buildConfigType(configType, sendOps),
-        buildClientType(clientType, sendOps),
         buildFactoryFunction(clientType, configType, sendOps),
     ];
     return [
