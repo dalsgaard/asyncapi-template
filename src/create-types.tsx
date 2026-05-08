@@ -1,7 +1,6 @@
 import { File, type FileProps } from '@asyncapi/generator-react-sdk';
 import React from 'react';
 
-const FileWithChildren = File as React.FC<FileProps & { children?: string }>;
 import { transformSchemaObject } from 'openapi-typescript';
 import {
   createPrinter,
@@ -16,13 +15,13 @@ import {
   Node,
 } from 'typescript';
 
-interface Message {
+type Message = {
   payload?: {
     'x-parser-schema-id'?: string;
   };
 }
 
-interface Operation {
+type Operation = {
   action: 'send' | 'receive';
   summary?: string;
   channel?: {
@@ -30,8 +29,9 @@ interface Operation {
   };
 }
 
-interface AsyncAPIDocument {
+type AsyncAPIDocument = {
   json(): {
+    info?: { title?: string };
     components?: { schemas?: Record<string, unknown> };
     operations?: Record<string, Operation>;
   };
@@ -92,8 +92,15 @@ function createTypesFile(
   return printFile([...schemaNodes, ...sendTypeNodes, ...receiveTypeNodes]);
 }
 
+const FileWithChildren = File as React.FC<FileProps & { children?: string }>;
+
+function toFilename(title: string): string {
+  return title.toLowerCase().replace(/\bevents\b/g, '').trim().replace(/\s+/g, '-') + '.d.ts';
+}
+
 export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
   const raw = asyncapi.json();
+  const filename = toFilename(raw.info?.title ?? 'asyncapi');
   const schemas = raw.components?.schemas ?? {};
   const operations = Object.entries(raw.operations ?? {}) as [string, Operation][];
 
@@ -101,8 +108,8 @@ export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
   const receiveOps = operations.filter(([, op]) => op.action === 'receive');
 
   return [
-    <FileWithChildren name="account.d.ts">
-      {`// Generated from asyncapi/account.asyncapi.yaml — do not edit manually\n\n${createTypesFile(schemas, sendOps, receiveOps)}\n`}
+    <FileWithChildren name={filename}>
+      {`// Generated — do not edit manually\n\n${createTypesFile(schemas, sendOps, receiveOps)}\n`}
     </FileWithChildren>,
   ];
 }
