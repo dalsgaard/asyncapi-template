@@ -20,10 +20,10 @@ asyncapi generate fromTemplate asyncapi/account.aas.yaml github:dalsgaard/asynca
   -o asyncapi/generated --force-write --no-interactive
 
 # From inside this repo (uses local template, rebuilds first):
-npm run gen:account
+npm run gen
 ```
 
-The `gen:account` script runs `tsc` before generating — the generator uses the compiled JS in `template/`, not the TypeScript source in `src/`.
+The `gen` script runs `tsc` before generating — the generator uses the compiled JS in `template/`, not the TypeScript source in `src/`.
 
 ## Spec conventions the template expects
 
@@ -95,7 +95,7 @@ src/                  TypeScript source (edit here)
   create-client.tsx   → <slug>-client.ts
   create-handlers.tsx → <slug>-handlers.ts
 template/             Compiled JS (committed — generator reads this from GitHub)
-examples/             Sample specs used by gen:account
+examples/             Sample specs used by gen
 ```
 
 ## Development
