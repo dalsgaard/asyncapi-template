@@ -77,6 +77,6 @@ export default function ({ asyncapi }) {
         buildFactoryFunction(clientType, configType, sendOps),
     ];
     return [
-        _jsx(FileWithChildren, { name: `${slug}-client.ts`, children: `// Generated — do not edit manually\n\n${printFile(statements)}` }),
+        _jsx(FileWithChildren, { name: `${slug}-aws-client.ts`, children: `// Generated — do not edit manually\n\n${printFile(statements)}` }),
     ];
 }

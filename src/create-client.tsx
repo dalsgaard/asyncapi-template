@@ -191,7 +191,7 @@ export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
   ];
 
   return [
-    <FileWithChildren name={`${slug}-client.ts`}>
+    <FileWithChildren name={`${slug}-aws-client.ts`}>
       {`// Generated — do not edit manually\n\n${printFile(statements)}`}
     </FileWithChildren>,
   ];

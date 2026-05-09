@@ -9,7 +9,7 @@ Given a spec with `info.title: Account Service`, three files are generated using
 | File | Purpose |
 |------|---------|
 | `account-service.d.ts` | TypeScript types for all schemas and operations |
-| `account-service-client.ts` | `createAccountServiceClient(config)` — publishes to SNS |
+| `account-service-aws-client.ts` | `createAccountServiceClient(config)` — publishes to SNS |
 | `account-service-handlers.ts` | `create<Name>Handler(callback)` — unwraps SQS→SNS envelope |
 
 ## Usage
@@ -22,7 +22,7 @@ asyncapi generate fromTemplate asyncapi/my-service.aas.yaml github:dalsgaard/asy
 ### Client
 
 ```typescript
-import { createAccountServiceClient } from './asyncapi/generated/account-service-client';
+import { createAccountServiceClient } from './asyncapi/generated/account-service-aws-client';
 
 const events = createAccountServiceClient({
   accountCreatedTopicArn: process.env.CREATED_TOPIC_ARN!,

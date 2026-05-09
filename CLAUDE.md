@@ -9,7 +9,7 @@ Given a spec with `info.title: Account Service`, the generator produces three fi
 | File | From operations | Purpose |
 |------|----------------|---------|
 | `account-service.d.ts` | all | TypeScript types for all schemas and operations, plus the aggregate client type |
-| `account-service-client.ts` | `send` | `createAccountServiceClient(config)` factory that publishes to SNS |
+| `account-service-aws-client.ts` | `send` | `createAccountServiceClient(config)` factory that publishes to SNS |
 | `account-service-handlers.ts` | `receive` | `create<Name>Handler(callback)` factories that unwrap SQS→SNS envelope |
 
 ## Running the generator
@@ -61,7 +61,7 @@ Operation payload types are resolved via `x-parser-schema-id`, which the AsyncAP
 ## Generated client usage
 
 ```typescript
-import { createAccountServiceClient } from './asyncapi/generated/account-service-client';
+import { createAccountServiceClient } from './asyncapi/generated/account-service-aws-client';
 import type { Account } from './asyncapi/generated/account-service';
 
 const events = createAccountServiceClient({
