@@ -103,7 +103,7 @@ examples/             Sample specs used by gen:account
 ```sh
 npm run build       # compile src/ → template/
 npm run typecheck   # type-check without emitting
-npm run gen:account # build + generate from examples/account.aas.yaml
+npm run gen        # build + generate from all examples/*.aas.yaml
 ```
 
 After changes, commit both `src/` and `template/` so GitHub-based consumers pick up the new compiled output immediately.
