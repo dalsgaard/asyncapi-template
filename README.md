@@ -47,15 +47,17 @@ export const handler = createCustomerDeletedHandler(async ({ id }) => {
 
 ### Operation naming
 
-Operations must be prefixed with `send` or `receive`:
+The `action` property determines which file an operation ends up in:
 
 ```yaml
 operations:
-  sendAccountCreated:       # → client file
+  sendAccountCreated:       # action: send → client file
     action: send
-  receiveCustomerDeleted:   # → handlers file
+  receiveCustomerDeleted:   # action: receive → handlers file
     action: receive
 ```
+
+By convention, operation names are prefixed with `send`/`receive` to match their action. The template strips this prefix when deriving parameter and handler names, so `sendAccountCreated` produces `accountCreatedTopicArn` and `receiveCustomerDeleted` produces `createCustomerDeletedHandler`.
 
 ### SNS Subject (optional)
 

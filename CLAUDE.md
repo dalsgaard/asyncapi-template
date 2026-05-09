@@ -29,7 +29,7 @@ The `gen:account` script runs `tsc` before generating — the generator uses the
 
 ### Operation naming
 
-Operations must be prefixed with `send` or `receive` (camelCase). The prefix determines which file the operation ends up in:
+The `action` property determines which file an operation ends up in:
 
 ```yaml
 operations:
@@ -39,7 +39,7 @@ operations:
     action: receive
 ```
 
-The prefix is stripped when naming the generated function: `sendAccountCreated` → `createAccountServiceClient().sendAccountCreated`, `receiveCustomerDeleted` → `createCustomerDeletedHandler`.
+By convention, operation names are prefixed with `send`/`receive` to match their action. The template strips this prefix when deriving parameter and handler names — `sendAccountCreated` → param `accountCreated`, config field `accountCreatedTopicArn`; `receiveCustomerDeleted` → `createCustomerDeletedHandler`. Without the prefix the names still work but become redundant (`sendAccountCreatedTopicArn` etc.).
 
 ### SNS Subject (optional)
 
