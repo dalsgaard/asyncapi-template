@@ -92,7 +92,7 @@ Each factory wraps an SQS handler that parses the SQS→SNS→JSON envelope and 
 ```
 src/                  TypeScript source (edit here)
   create-types.tsx    → <slug>.d.ts
-  create-client.tsx   → <slug>-client.ts
+  create-client.tsx   → <slug>-aws-client.ts
   create-handlers.tsx → <slug>-handlers.ts
 template/             Compiled JS (committed — generator reads this from GitHub)
 examples/             Sample specs used by gen
@@ -107,3 +107,5 @@ npm run gen        # build + generate from all examples/*.aas.yaml
 ```
 
 After changes, commit both `src/` and `template/` so GitHub-based consumers pick up the new compiled output immediately.
+
+> **Note:** The generator never deletes old output files. If a generated filename changes (e.g. a template rename), manually delete the stale file from the output directory in both this repo (`generated/`) and any consuming project.
