@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "gen:account": "npm run build && asyncapi generate fromTemplate examples/account.aas.yaml . -o generated --force-write --no-interactive"
+    "gen": "npm run build && for f in examples/*.aas.yaml; do asyncapi generate fromTemplate \"$f\" . -o generated --force-write --no-interactive; done"
   },
   "devDependencies": {
     "@asyncapi/cli": "^6.0.0",
