@@ -83,13 +83,26 @@ import { createAccountServiceAmqpClient } from './asyncapi/generated/account-ser
 
 const events = await createAccountServiceAmqpClient({
   url: 'amqp://localhost',
-  exchange: 'account-events',
 });
 
 await events.sendAccountCreated(account);
 ```
 
 The factory is `async` — it calls `amqplib.connect` and `createChannel` internally. Both clients implement the same `AccountServiceClient` type, so they are interchangeable. The consuming project must install `amqplib`.
+
+### Exchange name
+
+Add `x-amqp-exchange` to the `info` block to bake the exchange name into the generated code — it will be emitted as a string literal and omitted from the config type:
+
+```yaml
+info:
+  title: Account Service
+  x-amqp-exchange: account-events
+```
+
+Without this extension, `exchange` remains a required field in the config.
+
+### Routing keys
 
 Routing keys default to the kebab-case operation name with the `send`/`receive` prefix stripped (`sendAccountCreated` → `account-created`). Override per message with `x-amqp-routing-key`:
 
