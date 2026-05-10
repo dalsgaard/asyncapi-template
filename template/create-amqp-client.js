@@ -30,20 +30,24 @@ function buildImports(clientType, typesModule) {
         ])), factory.createStringLiteral(typesModule)),
     ];
 }
-function buildConfigType(name) {
+function buildConfigType(name, includeExchange) {
     const stringProp = (key) => factory.createPropertySignature(undefined, factory.createIdentifier(key), undefined, factory.createKeywordTypeNode(SyntaxKind.StringKeyword));
-    return factory.createTypeAliasDeclaration([factory.createToken(SyntaxKind.ExportKeyword)], name, undefined, factory.createTypeLiteralNode([stringProp('url'), stringProp('exchange')]));
+    const props = includeExchange ? [stringProp('url'), stringProp('exchange')] : [stringProp('url')];
+    return factory.createTypeAliasDeclaration([factory.createToken(SyntaxKind.ExportKeyword)], name, undefined, factory.createTypeLiteralNode(props));
 }
-function buildMethodArrow(op, opName, param) {
+function buildMethodArrow(op, opName, param, exchange) {
     const routingKey = getRoutingKey(op, opName);
+    const exchangeExpr = exchange
+        ? factory.createStringLiteral(exchange)
+        : factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'exchange');
     const publishCall = factory.createExpressionStatement(factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('channel'), 'publish'), undefined, [
-        factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'exchange'),
+        exchangeExpr,
         factory.createStringLiteral(routingKey),
         factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('Buffer'), 'from'), undefined, [factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('JSON'), 'stringify'), undefined, [factory.createIdentifier(param)])]),
     ]));
     return factory.createArrowFunction([factory.createToken(SyntaxKind.AsyncKeyword)], undefined, [factory.createParameterDeclaration(undefined, undefined, param)], undefined, factory.createToken(SyntaxKind.EqualsGreaterThanToken), factory.createBlock([publishCall], true));
 }
-function buildFactoryFunction(clientType, configType, sendOps) {
+function buildFactoryFunction(clientType, configType, sendOps, exchange) {
     const awaitDecl = (varName, expr) => factory.createVariableStatement(undefined, factory.createVariableDeclarationList([
         factory.createVariableDeclaration(varName, undefined, undefined, factory.createAwaitExpression(expr)),
     ], NodeFlags.Const));
@@ -51,7 +55,7 @@ function buildFactoryFunction(clientType, configType, sendOps) {
     const channelDecl = awaitDecl('channel', factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('connection'), 'createChannel'), undefined, []));
     const properties = sendOps.map(([name, op]) => {
         const param = toCamelCase(stripActionPrefix(name));
-        return factory.createPropertyAssignment(name, buildMethodArrow(op, name, param));
+        return factory.createPropertyAssignment(name, buildMethodArrow(op, name, param, exchange));
     });
     const factoryName = 'create' + clientType.replace(/Client$/, 'AmqpClient');
     return factory.createFunctionDeclaration([factory.createToken(SyntaxKind.ExportKeyword), factory.createToken(SyntaxKind.AsyncKeyword)], undefined, factoryName, undefined, [factory.createParameterDeclaration(undefined, undefined, 'config', undefined, factory.createTypeReferenceNode(configType))], factory.createTypeReferenceNode('Promise', [factory.createTypeReferenceNode(clientType)]), factory.createBlock([
@@ -67,6 +71,7 @@ function printFile(statements) {
 export default function ({ asyncapi }) {
     const raw = asyncapi.json();
     const slug = toSlug(raw.info?.title ?? 'asyncapi');
+    const exchange = raw.info?.['x-amqp-exchange'];
     const operations = Object.entries(raw.operations ?? {});
     const sendOps = operations.filter(([, op]) => op.action === 'send');
     if (sendOps.length === 0)
@@ -75,8 +80,8 @@ export default function ({ asyncapi }) {
     const configType = clientType.replace(/Client$/, 'AmqpClientConfig');
     const statements = [
         ...buildImports(clientType, `./${slug}`),
-        buildConfigType(configType),
-        buildFactoryFunction(clientType, configType, sendOps),
+        buildConfigType(configType, exchange === undefined),
+        buildFactoryFunction(clientType, configType, sendOps, exchange),
     ];
     return [
         _jsx(FileWithChildren, { name: `${slug}-amqp-client.ts`, children: `// Generated — do not edit manually\n\n${printFile(statements)}` }),

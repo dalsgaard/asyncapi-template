@@ -4,6 +4,7 @@ info:
   title: Account Service
   version: 1.0.0
   description: Async events published and consumed by account-service via AWS SNS
+  x-amqp-exchange: account-events
 
 servers:
   production:

@@ -26,7 +26,7 @@ type Operation = {
 
 type AsyncAPIDocument = {
   json(): {
-    info?: { title?: string };
+    info?: { title?: string; 'x-amqp-exchange'?: string };
     operations?: Record<string, Operation>;
   };
 }
@@ -73,30 +73,34 @@ function buildImports(clientType: string, typesModule: string): Statement[] {
   ];
 }
 
-function buildConfigType(name: string): Statement {
+function buildConfigType(name: string, includeExchange: boolean): Statement {
   const stringProp = (key: string) => factory.createPropertySignature(
     undefined,
     factory.createIdentifier(key),
     undefined,
     factory.createKeywordTypeNode(SyntaxKind.StringKeyword),
   );
+  const props = includeExchange ? [stringProp('url'), stringProp('exchange')] : [stringProp('url')];
   return factory.createTypeAliasDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
     name,
     undefined,
-    factory.createTypeLiteralNode([stringProp('url'), stringProp('exchange')]),
+    factory.createTypeLiteralNode(props),
   );
 }
 
-function buildMethodArrow(op: Operation, opName: string, param: string) {
+function buildMethodArrow(op: Operation, opName: string, param: string, exchange: string | undefined) {
   const routingKey = getRoutingKey(op, opName);
+  const exchangeExpr = exchange
+    ? factory.createStringLiteral(exchange)
+    : factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'exchange');
 
   const publishCall = factory.createExpressionStatement(
     factory.createCallExpression(
       factory.createPropertyAccessExpression(factory.createIdentifier('channel'), 'publish'),
       undefined,
       [
-        factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'exchange'),
+        exchangeExpr,
         factory.createStringLiteral(routingKey),
         factory.createCallExpression(
           factory.createPropertyAccessExpression(factory.createIdentifier('Buffer'), 'from'),
@@ -121,7 +125,7 @@ function buildMethodArrow(op: Operation, opName: string, param: string) {
   );
 }
 
-function buildFactoryFunction(clientType: string, configType: string, sendOps: [string, Operation][]): Statement {
+function buildFactoryFunction(clientType: string, configType: string, sendOps: [string, Operation][], exchange: string | undefined): Statement {
   const awaitDecl = (varName: string, expr: ReturnType<typeof factory.createCallExpression>) =>
     factory.createVariableStatement(
       undefined,
@@ -151,7 +155,7 @@ function buildFactoryFunction(clientType: string, configType: string, sendOps: [
 
   const properties = sendOps.map(([name, op]) => {
     const param = toCamelCase(stripActionPrefix(name));
-    return factory.createPropertyAssignment(name, buildMethodArrow(op, name, param));
+    return factory.createPropertyAssignment(name, buildMethodArrow(op, name, param, exchange));
   });
 
   const factoryName = 'create' + clientType.replace(/Client$/, 'AmqpClient');
@@ -179,6 +183,7 @@ function printFile(statements: Statement[]): string {
 export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
   const raw = asyncapi.json();
   const slug = toSlug(raw.info?.title ?? 'asyncapi');
+  const exchange = raw.info?.['x-amqp-exchange'];
   const operations = Object.entries(raw.operations ?? {}) as [string, Operation][];
   const sendOps = operations.filter(([, op]) => op.action === 'send');
 
@@ -189,8 +194,8 @@ export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
 
   const statements: Statement[] = [
     ...buildImports(clientType, `./${slug}`),
-    buildConfigType(configType),
-    buildFactoryFunction(clientType, configType, sendOps),
+    buildConfigType(configType, exchange === undefined),
+    buildFactoryFunction(clientType, configType, sendOps, exchange),
   ];
 
   return [
