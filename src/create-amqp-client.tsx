@@ -115,43 +115,50 @@ function buildMethodArrow(op: Operation, opName: string, param: string, exchange
     ),
   );
 
+  const waitForConfirms = factory.createExpressionStatement(
+    factory.createAwaitExpression(
+      factory.createCallExpression(
+        factory.createPropertyAccessExpression(factory.createIdentifier('channel'), 'waitForConfirms'),
+        undefined,
+        [],
+      ),
+    ),
+  );
+
   return factory.createArrowFunction(
     [factory.createToken(SyntaxKind.AsyncKeyword)],
     undefined,
     [factory.createParameterDeclaration(undefined, undefined, param)],
     undefined,
     factory.createToken(SyntaxKind.EqualsGreaterThanToken),
-    factory.createBlock([publishCall], true),
+    factory.createBlock([publishCall, waitForConfirms], true),
+  );
+}
+
+function awaitCall(obj: string, method: string, args: Parameters<typeof factory.createCallExpression>[2] = []) {
+  return factory.createAwaitExpression(
+    factory.createCallExpression(
+      factory.createPropertyAccessExpression(factory.createIdentifier(obj), method),
+      undefined,
+      args,
+    ),
   );
 }
 
 function buildFactoryFunction(clientType: string, configType: string, sendOps: [string, Operation][], exchange: string | undefined): Statement {
-  const awaitDecl = (varName: string, expr: ReturnType<typeof factory.createCallExpression>) =>
+  const makeConst = (name: string, init: ReturnType<typeof factory.createAwaitExpression>) =>
     factory.createVariableStatement(
       undefined,
       factory.createVariableDeclarationList([
-        factory.createVariableDeclaration(
-          varName, undefined, undefined,
-          factory.createAwaitExpression(expr),
-        ),
+        factory.createVariableDeclaration(name, undefined, undefined, init),
       ], NodeFlags.Const),
     );
 
-  const connectionDecl = awaitDecl('connection',
-    factory.createCallExpression(
-      factory.createPropertyAccessExpression(factory.createIdentifier('amqplib'), 'connect'),
-      undefined,
-      [factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'url')],
-    ),
-  );
+  const connectionDecl = makeConst('connection', awaitCall('amqplib', 'connect', [
+    factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'url'),
+  ]));
 
-  const channelDecl = awaitDecl('channel',
-    factory.createCallExpression(
-      factory.createPropertyAccessExpression(factory.createIdentifier('connection'), 'createChannel'),
-      undefined,
-      [],
-    ),
-  );
+  const channelDecl = makeConst('channel', awaitCall('connection', 'createConfirmChannel'));
 
   const exchangeExpr = exchange
     ? factory.createStringLiteral(exchange)
@@ -173,10 +180,46 @@ function buildFactoryFunction(clientType: string, configType: string, sendOps: [
     ),
   );
 
+  const closeProp = factory.createPropertyAssignment(
+    'close',
+    factory.createArrowFunction(
+      [factory.createToken(SyntaxKind.AsyncKeyword)],
+      undefined, [],
+      undefined,
+      factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+      factory.createBlock([
+        factory.createExpressionStatement(
+          factory.createAwaitExpression(
+            factory.createCallExpression(
+              factory.createPropertyAccessExpression(factory.createIdentifier('connection'), 'close'),
+              undefined, [],
+            ),
+          ),
+        ),
+      ], true),
+    ),
+  );
+
   const properties = sendOps.map(([name, op]) => {
     const param = toCamelCase(stripActionPrefix(name));
     return factory.createPropertyAssignment(name, buildMethodArrow(op, name, param, exchange));
   });
+
+  const returnType = factory.createTypeReferenceNode('Promise', [
+    factory.createIntersectionTypeNode([
+      factory.createTypeReferenceNode(clientType),
+      factory.createTypeLiteralNode([
+        factory.createPropertySignature(
+          undefined,
+          factory.createIdentifier('close'),
+          undefined,
+          factory.createFunctionTypeNode(undefined, [],
+            factory.createTypeReferenceNode('Promise', [factory.createKeywordTypeNode(SyntaxKind.VoidKeyword)]),
+          ),
+        ),
+      ]),
+    ]),
+  ]);
 
   const factoryName = 'create' + clientType.replace(/Client$/, 'AmqpClient');
 
@@ -186,12 +229,12 @@ function buildFactoryFunction(clientType: string, configType: string, sendOps: [
     factoryName,
     undefined,
     [factory.createParameterDeclaration(undefined, undefined, 'config', undefined, factory.createTypeReferenceNode(configType))],
-    factory.createTypeReferenceNode('Promise', [factory.createTypeReferenceNode(clientType)]),
+    returnType,
     factory.createBlock([
       connectionDecl,
       channelDecl,
       assertExchangeStmt,
-      factory.createReturnStatement(factory.createObjectLiteralExpression(properties, true)),
+      factory.createReturnStatement(factory.createObjectLiteralExpression([...properties, closeProp], true)),
     ], true),
   );
 }

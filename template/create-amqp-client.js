@@ -45,14 +45,20 @@ function buildMethodArrow(op, opName, param, exchange) {
         factory.createStringLiteral(routingKey),
         factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('Buffer'), 'from'), undefined, [factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('JSON'), 'stringify'), undefined, [factory.createIdentifier(param)])]),
     ]));
-    return factory.createArrowFunction([factory.createToken(SyntaxKind.AsyncKeyword)], undefined, [factory.createParameterDeclaration(undefined, undefined, param)], undefined, factory.createToken(SyntaxKind.EqualsGreaterThanToken), factory.createBlock([publishCall], true));
+    const waitForConfirms = factory.createExpressionStatement(factory.createAwaitExpression(factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('channel'), 'waitForConfirms'), undefined, [])));
+    return factory.createArrowFunction([factory.createToken(SyntaxKind.AsyncKeyword)], undefined, [factory.createParameterDeclaration(undefined, undefined, param)], undefined, factory.createToken(SyntaxKind.EqualsGreaterThanToken), factory.createBlock([publishCall, waitForConfirms], true));
+}
+function awaitCall(obj, method, args = []) {
+    return factory.createAwaitExpression(factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier(obj), method), undefined, args));
 }
 function buildFactoryFunction(clientType, configType, sendOps, exchange) {
-    const awaitDecl = (varName, expr) => factory.createVariableStatement(undefined, factory.createVariableDeclarationList([
-        factory.createVariableDeclaration(varName, undefined, undefined, factory.createAwaitExpression(expr)),
+    const makeConst = (name, init) => factory.createVariableStatement(undefined, factory.createVariableDeclarationList([
+        factory.createVariableDeclaration(name, undefined, undefined, init),
     ], NodeFlags.Const));
-    const connectionDecl = awaitDecl('connection', factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('amqplib'), 'connect'), undefined, [factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'url')]));
-    const channelDecl = awaitDecl('channel', factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('connection'), 'createChannel'), undefined, []));
+    const connectionDecl = makeConst('connection', awaitCall('amqplib', 'connect', [
+        factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'url'),
+    ]));
+    const channelDecl = makeConst('channel', awaitCall('connection', 'createConfirmChannel'));
     const exchangeExpr = exchange
         ? factory.createStringLiteral(exchange)
         : factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'exchange');
@@ -63,16 +69,27 @@ function buildFactoryFunction(clientType, configType, sendOps, exchange) {
             factory.createPropertyAssignment('durable', factory.createTrue()),
         ], false),
     ])));
+    const closeProp = factory.createPropertyAssignment('close', factory.createArrowFunction([factory.createToken(SyntaxKind.AsyncKeyword)], undefined, [], undefined, factory.createToken(SyntaxKind.EqualsGreaterThanToken), factory.createBlock([
+        factory.createExpressionStatement(factory.createAwaitExpression(factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('connection'), 'close'), undefined, []))),
+    ], true)));
     const properties = sendOps.map(([name, op]) => {
         const param = toCamelCase(stripActionPrefix(name));
         return factory.createPropertyAssignment(name, buildMethodArrow(op, name, param, exchange));
     });
+    const returnType = factory.createTypeReferenceNode('Promise', [
+        factory.createIntersectionTypeNode([
+            factory.createTypeReferenceNode(clientType),
+            factory.createTypeLiteralNode([
+                factory.createPropertySignature(undefined, factory.createIdentifier('close'), undefined, factory.createFunctionTypeNode(undefined, [], factory.createTypeReferenceNode('Promise', [factory.createKeywordTypeNode(SyntaxKind.VoidKeyword)]))),
+            ]),
+        ]),
+    ]);
     const factoryName = 'create' + clientType.replace(/Client$/, 'AmqpClient');
-    return factory.createFunctionDeclaration([factory.createToken(SyntaxKind.ExportKeyword), factory.createToken(SyntaxKind.AsyncKeyword)], undefined, factoryName, undefined, [factory.createParameterDeclaration(undefined, undefined, 'config', undefined, factory.createTypeReferenceNode(configType))], factory.createTypeReferenceNode('Promise', [factory.createTypeReferenceNode(clientType)]), factory.createBlock([
+    return factory.createFunctionDeclaration([factory.createToken(SyntaxKind.ExportKeyword), factory.createToken(SyntaxKind.AsyncKeyword)], undefined, factoryName, undefined, [factory.createParameterDeclaration(undefined, undefined, 'config', undefined, factory.createTypeReferenceNode(configType))], returnType, factory.createBlock([
         connectionDecl,
         channelDecl,
         assertExchangeStmt,
-        factory.createReturnStatement(factory.createObjectLiteralExpression(properties, true)),
+        factory.createReturnStatement(factory.createObjectLiteralExpression([...properties, closeProp], true)),
     ], true));
 }
 function printFile(statements) {
