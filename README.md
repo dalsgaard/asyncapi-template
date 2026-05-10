@@ -11,7 +11,7 @@ Given a spec with `info.title: Account Service`, five files are generated using 
 | `account-service.d.ts` | TypeScript types for all schemas and operations |
 | `account-service-aws-client.ts` | `createAccountServiceClient(config)` — publishes to AWS SNS |
 | `account-service-amqp-client.ts` | `createAccountServiceAmqpClient(config)` — publishes via AMQP |
-| `account-service-handlers.ts` | `create<Name>Handler(callback)` — unwraps SQS→SNS envelope |
+| `account-service-aws-handlers.ts` | `create<Name>Handler(callback)` — unwraps SQS→SNS envelope |
 | `account-service-amqp-listeners.ts` | `create<Name>AmqpListener(config, callback)` — consumes from AMQP |
 
 ## Usage

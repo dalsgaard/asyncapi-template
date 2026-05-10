@@ -11,7 +11,7 @@ Given a spec with `info.title: Account Service`, the generator produces three fi
 | `account-service.d.ts` | all | TypeScript types for all schemas and operations, plus the aggregate client type |
 | `account-service-aws-client.ts` | `send` | `createAccountServiceClient(config)` factory that publishes to AWS SNS |
 | `account-service-amqp-client.ts` | `send` | `createAccountServiceAmqpClient(config)` factory that publishes via AMQP |
-| `account-service-handlers.ts` | `receive` | `create<Name>Handler(callback)` factories that unwrap SQS→SNS envelope |
+| `account-service-aws-handlers.ts` | `receive` | `create<Name>Handler(callback)` factories that unwrap SQS→SNS envelope |
 | `account-service-amqp-listeners.ts` | `receive` | `create<Name>AmqpListener(config, callback)` factories that consume from AMQP |
 
 ## Running the generator
@@ -153,7 +153,7 @@ src/                  TypeScript source (edit here)
   create-types.tsx    → <slug>.d.ts
   create-client.tsx        → <slug>-aws-client.ts
   create-amqp-client.tsx   → <slug>-amqp-client.ts
-  create-handlers.tsx      → <slug>-handlers.ts
+  create-aws-handlers.tsx      → <slug>-handlers.ts
   create-amqp-listeners.tsx → <slug>-amqp-listeners.ts
 template/             Compiled JS (committed — generator reads this from GitHub)
 examples/             Sample specs used by gen

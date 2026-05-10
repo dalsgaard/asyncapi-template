@@ -71,7 +71,7 @@ export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
 
   if (receiveOps.length === 0) return [];
 
-  const filename = toSlug(raw.info?.title ?? 'asyncapi') + '-handlers.ts';
+  const filename = toSlug(raw.info?.title ?? 'asyncapi') + '-aws-handlers.ts';
 
   return [
     <FileWithChildren name={filename}>

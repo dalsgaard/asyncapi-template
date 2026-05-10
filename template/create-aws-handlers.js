@@ -49,7 +49,7 @@ export default function ({ asyncapi }) {
     const receiveOps = operations.filter(([, op]) => op.action === 'receive');
     if (receiveOps.length === 0)
         return [];
-    const filename = toSlug(raw.info?.title ?? 'asyncapi') + '-handlers.ts';
+    const filename = toSlug(raw.info?.title ?? 'asyncapi') + '-aws-handlers.ts';
     return [
         _jsx(FileWithChildren, { name: filename, children: `// Generated — do not edit manually\n\n${generateFile(receiveOps, typesModule)}` }),
     ];
