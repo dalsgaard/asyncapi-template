@@ -153,6 +153,26 @@ function buildFactoryFunction(clientType: string, configType: string, sendOps: [
     ),
   );
 
+  const exchangeExpr = exchange
+    ? factory.createStringLiteral(exchange)
+    : factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'exchange');
+
+  const assertExchangeStmt = factory.createExpressionStatement(
+    factory.createAwaitExpression(
+      factory.createCallExpression(
+        factory.createPropertyAccessExpression(factory.createIdentifier('channel'), 'assertExchange'),
+        undefined,
+        [
+          exchangeExpr,
+          factory.createStringLiteral('topic'),
+          factory.createObjectLiteralExpression([
+            factory.createPropertyAssignment('durable', factory.createTrue()),
+          ], false),
+        ],
+      ),
+    ),
+  );
+
   const properties = sendOps.map(([name, op]) => {
     const param = toCamelCase(stripActionPrefix(name));
     return factory.createPropertyAssignment(name, buildMethodArrow(op, name, param, exchange));
@@ -170,6 +190,7 @@ function buildFactoryFunction(clientType: string, configType: string, sendOps: [
     factory.createBlock([
       connectionDecl,
       channelDecl,
+      assertExchangeStmt,
       factory.createReturnStatement(factory.createObjectLiteralExpression(properties, true)),
     ], true),
   );

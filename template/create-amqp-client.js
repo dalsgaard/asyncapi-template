@@ -53,6 +53,16 @@ function buildFactoryFunction(clientType, configType, sendOps, exchange) {
     ], NodeFlags.Const));
     const connectionDecl = awaitDecl('connection', factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('amqplib'), 'connect'), undefined, [factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'url')]));
     const channelDecl = awaitDecl('channel', factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('connection'), 'createChannel'), undefined, []));
+    const exchangeExpr = exchange
+        ? factory.createStringLiteral(exchange)
+        : factory.createPropertyAccessExpression(factory.createIdentifier('config'), 'exchange');
+    const assertExchangeStmt = factory.createExpressionStatement(factory.createAwaitExpression(factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier('channel'), 'assertExchange'), undefined, [
+        exchangeExpr,
+        factory.createStringLiteral('topic'),
+        factory.createObjectLiteralExpression([
+            factory.createPropertyAssignment('durable', factory.createTrue()),
+        ], false),
+    ])));
     const properties = sendOps.map(([name, op]) => {
         const param = toCamelCase(stripActionPrefix(name));
         return factory.createPropertyAssignment(name, buildMethodArrow(op, name, param, exchange));
@@ -61,6 +71,7 @@ function buildFactoryFunction(clientType, configType, sendOps, exchange) {
     return factory.createFunctionDeclaration([factory.createToken(SyntaxKind.ExportKeyword), factory.createToken(SyntaxKind.AsyncKeyword)], undefined, factoryName, undefined, [factory.createParameterDeclaration(undefined, undefined, 'config', undefined, factory.createTypeReferenceNode(configType))], factory.createTypeReferenceNode('Promise', [factory.createTypeReferenceNode(clientType)]), factory.createBlock([
         connectionDecl,
         channelDecl,
+        assertExchangeStmt,
         factory.createReturnStatement(factory.createObjectLiteralExpression(properties, true)),
     ], true));
 }
