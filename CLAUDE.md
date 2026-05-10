@@ -1,6 +1,6 @@
 # asyncapi-template
 
-An AsyncAPI Generator template that produces TypeScript types, an SNS publisher client, and SQS handler factories from an AsyncAPI 3.0 spec.
+An AsyncAPI Generator template that produces TypeScript types, an SNS publisher client, an AMQP publisher client, SQS handler factories, and AMQP listener factories from an AsyncAPI 3.0 spec.
 
 ## What it generates
 
@@ -12,6 +12,7 @@ Given a spec with `info.title: Account Service`, the generator produces three fi
 | `account-service-aws-client.ts` | `send` | `createAccountServiceClient(config)` factory that publishes to AWS SNS |
 | `account-service-amqp-client.ts` | `send` | `createAccountServiceAmqpClient(config)` factory that publishes via AMQP |
 | `account-service-handlers.ts` | `receive` | `create<Name>Handler(callback)` factories that unwrap SQS→SNS envelope |
+| `account-service-amqp-listeners.ts` | `receive` | `create<Name>AmqpListener(config, callback)` factories that consume from AMQP |
 
 ## Running the generator
 
@@ -36,11 +37,11 @@ The `action` property determines which file an operation ends up in:
 operations:
   sendAccountCreated:   # → client file
     action: send
-  receiveCustomerDeleted:  # → handlers file
+  receiveCustomerDeleted:  # → handlers + listeners files
     action: receive
 ```
 
-By convention, operation names are prefixed with `send`/`receive` to match their action. The template strips this prefix when deriving parameter and handler names — `sendAccountCreated` → param `accountCreated`, config field `accountCreatedTopicArn`; `receiveCustomerDeleted` → `createCustomerDeletedHandler`. Without the prefix the names still work but become redundant (`sendAccountCreatedTopicArn` etc.).
+By convention, operation names are prefixed with `send`/`receive` to match their action. The template strips this prefix when deriving parameter and handler names — `sendAccountCreated` → param `accountCreated`, config field `accountCreatedTopicArn`; `receiveCustomerDeleted` → `createCustomerDeletedHandler` / `createCustomerDeletedAmqpListener`. Without the prefix the names still work but become redundant (`sendAccountCreatedTopicArn` etc.).
 
 ### SNS Subject (optional)
 
@@ -113,7 +114,7 @@ components:
       x-amqp-routing-key: accounts.created
 ```
 
-## Generated handler usage
+## Generated SQS handler usage
 
 ```typescript
 import { createCustomerDeletedHandler } from './asyncapi/generated/account-service-handlers';
@@ -125,6 +126,26 @@ export const handler = createCustomerDeletedHandler(async ({ id }) => {
 
 Each factory wraps an SQS handler that parses the SQS→SNS→JSON envelope and calls the callback once per record.
 
+## Generated AMQP listener usage
+
+```typescript
+import { createCustomerDeletedAmqpListener } from './asyncapi/generated/account-service-amqp-listeners';
+
+const listener = await createCustomerDeletedAmqpListener(
+  { url: 'amqp://localhost', queue: 'my-service' },
+  async ({ id }) => {
+    // id is typed from the CustomerDeleted schema
+  },
+);
+
+// Graceful shutdown
+process.on('SIGINT', async () => { await listener.close(); process.exit(0); });
+```
+
+Each factory connects to AMQP, asserts the exchange and queue, binds with the correct routing key, and begins consuming. The callback receives a fully typed payload. Call `listener.close()` to shut down the connection.
+
+The `queue` name is runtime config — different consumers of the same event use different queue names so each gets its own copy of the message. The exchange and routing key are derived from the spec.
+
 ## Template structure
 
 ```
@@ -133,6 +154,7 @@ src/                  TypeScript source (edit here)
   create-client.tsx        → <slug>-aws-client.ts
   create-amqp-client.tsx   → <slug>-amqp-client.ts
   create-handlers.tsx      → <slug>-handlers.ts
+  create-amqp-listeners.tsx → <slug>-amqp-listeners.ts
 template/             Compiled JS (committed — generator reads this from GitHub)
 examples/             Sample specs used by gen
 ```
