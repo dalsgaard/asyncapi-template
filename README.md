@@ -9,7 +9,8 @@ Given a spec with `info.title: Account Service`, three files are generated using
 | File | Purpose |
 |------|---------|
 | `account-service.d.ts` | TypeScript types for all schemas and operations |
-| `account-service-aws-client.ts` | `createAccountServiceClient(config)` — publishes to SNS |
+| `account-service-aws-client.ts` | `createAccountServiceClient(config)` — publishes to AWS SNS |
+| `account-service-amqp-client.ts` | `createAccountServiceAmqpClient(config)` — publishes via AMQP |
 | `account-service-handlers.ts` | `create<Name>Handler(callback)` — unwraps SQS→SNS envelope |
 
 ## Usage
@@ -41,6 +42,28 @@ import { createCustomerDeletedHandler } from './asyncapi/generated/account-servi
 export const handler = createCustomerDeletedHandler(async ({ id }) => {
   // id is typed from the CustomerDeleted schema
 });
+```
+
+### AMQP client
+
+```typescript
+import { createAccountServiceAmqpClient } from './asyncapi/generated/account-service-amqp-client';
+
+const events = await createAccountServiceAmqpClient({
+  url: 'amqp://localhost',
+  exchange: 'account-events',
+});
+```
+
+The factory is `async`. Both clients implement the same `AccountServiceClient` type and are interchangeable. The consuming project must install `amqplib`.
+
+Routing keys default to the kebab-case operation name minus the `send` prefix (`sendAccountCreated` → `account-created`). Override per message with `x-amqp-routing-key`:
+
+```yaml
+components:
+  messages:
+    AccountCreated:
+      x-amqp-routing-key: accounts.created
 ```
 
 ## Spec conventions

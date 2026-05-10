@@ -9,7 +9,8 @@ Given a spec with `info.title: Account Service`, the generator produces three fi
 | File | From operations | Purpose |
 |------|----------------|---------|
 | `account-service.d.ts` | all | TypeScript types for all schemas and operations, plus the aggregate client type |
-| `account-service-aws-client.ts` | `send` | `createAccountServiceClient(config)` factory that publishes to SNS |
+| `account-service-aws-client.ts` | `send` | `createAccountServiceClient(config)` factory that publishes to AWS SNS |
+| `account-service-amqp-client.ts` | `send` | `createAccountServiceAmqpClient(config)` factory that publishes via AMQP |
 | `account-service-handlers.ts` | `receive` | `create<Name>Handler(callback)` factories that unwrap SQS→SNS envelope |
 
 ## Running the generator
@@ -75,6 +76,30 @@ await events.sendAccountCreated(account);
 
 The factory creates an `SNSClient` internally. The config type (`AccountServiceClientConfig`) has one `*TopicArn` field per `send` operation.
 
+## Generated AMQP client usage
+
+```typescript
+import { createAccountServiceAmqpClient } from './asyncapi/generated/account-service-amqp-client';
+
+const events = await createAccountServiceAmqpClient({
+  url: 'amqp://localhost',
+  exchange: 'account-events',
+});
+
+await events.sendAccountCreated(account);
+```
+
+The factory is `async` — it calls `amqplib.connect` and `createChannel` internally. Both clients implement the same `AccountServiceClient` type, so they are interchangeable. The consuming project must install `amqplib`.
+
+Routing keys default to the kebab-case operation name with the `send`/`receive` prefix stripped (`sendAccountCreated` → `account-created`). Override per message with `x-amqp-routing-key`:
+
+```yaml
+components:
+  messages:
+    AccountCreated:
+      x-amqp-routing-key: accounts.created
+```
+
 ## Generated handler usage
 
 ```typescript
@@ -92,8 +117,9 @@ Each factory wraps an SQS handler that parses the SQS→SNS→JSON envelope and 
 ```
 src/                  TypeScript source (edit here)
   create-types.tsx    → <slug>.d.ts
-  create-client.tsx   → <slug>-aws-client.ts
-  create-handlers.tsx → <slug>-handlers.ts
+  create-client.tsx        → <slug>-aws-client.ts
+  create-amqp-client.tsx   → <slug>-amqp-client.ts
+  create-handlers.tsx      → <slug>-handlers.ts
 template/             Compiled JS (committed — generator reads this from GitHub)
 examples/             Sample specs used by gen
 ```
