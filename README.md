@@ -1,10 +1,10 @@
 # asyncapi-template
 
-An [AsyncAPI Generator](https://www.asyncapi.com/tools/generator) template that produces TypeScript types, an SNS publisher client, and SQS handler factories from an AsyncAPI 3.0 spec.
+An [AsyncAPI Generator](https://www.asyncapi.com/tools/generator) template that produces TypeScript types, an SNS publisher client, an AMQP publisher client, SQS handler factories, and AMQP listener factories from an AsyncAPI 3.0 spec.
 
 ## Generated output
 
-Given a spec with `info.title: Account Service`, three files are generated using the title slug (`account-service`):
+Given a spec with `info.title: Account Service`, five files are generated using the title slug (`account-service`):
 
 | File | Purpose |
 |------|---------|
@@ -12,6 +12,7 @@ Given a spec with `info.title: Account Service`, three files are generated using
 | `account-service-aws-client.ts` | `createAccountServiceClient(config)` — publishes to AWS SNS |
 | `account-service-amqp-client.ts` | `createAccountServiceAmqpClient(config)` — publishes via AMQP |
 | `account-service-handlers.ts` | `create<Name>Handler(callback)` — unwraps SQS→SNS envelope |
+| `account-service-amqp-listeners.ts` | `create<Name>AmqpListener(config, callback)` — consumes from AMQP |
 
 ## Usage
 
@@ -20,7 +21,7 @@ asyncapi generate fromTemplate asyncapi/my-service.aas.yaml github:dalsgaard/asy
   -o asyncapi/generated --force-write --no-interactive
 ```
 
-### Client
+### AWS SNS client
 
 ```typescript
 import { createAccountServiceClient } from './asyncapi/generated/account-service-aws-client';
@@ -34,7 +35,22 @@ const events = createAccountServiceClient({
 await events.sendAccountCreated(account);
 ```
 
-### Handlers
+### AMQP client
+
+```typescript
+import { createAccountServiceAmqpClient } from './asyncapi/generated/account-service-amqp-client';
+
+const events = await createAccountServiceAmqpClient({
+  url: 'amqp://localhost',
+});
+
+await events.sendAccountCreated(account);
+await events.close();
+```
+
+The factory is `async` and uses publisher confirms — `sendX` only resolves once the broker has acknowledged the message. Both clients implement the same `AccountServiceClient` type and are interchangeable. The consuming project must install `amqplib`.
+
+### SQS handlers
 
 ```typescript
 import { createCustomerDeletedHandler } from './asyncapi/generated/account-service-handlers';
@@ -44,19 +60,42 @@ export const handler = createCustomerDeletedHandler(async ({ id }) => {
 });
 ```
 
-### AMQP client
+### AMQP listeners
 
 ```typescript
-import { createAccountServiceAmqpClient } from './asyncapi/generated/account-service-amqp-client';
+import { createCustomerDeletedAmqpListener } from './asyncapi/generated/account-service-amqp-listeners';
 
-const events = await createAccountServiceAmqpClient({
-  url: 'amqp://localhost',
-});
+const listener = await createCustomerDeletedAmqpListener(
+  { url: 'amqp://localhost', queue: 'my-service' },
+  async ({ id }) => {
+    // id is typed from the CustomerDeleted schema
+  },
+);
+
+process.on('SIGINT', async () => { await listener.close(); process.exit(0); });
 ```
 
-The factory is `async`. Both clients implement the same `AccountServiceClient` type and are interchangeable. The consuming project must install `amqplib`.
+Each listener asserts the exchange and queue, binds with the correct routing key, and begins consuming. The `queue` name is runtime config — different consumers use different queue names so each gets its own copy of the message.
 
-Add `x-amqp-exchange` to the `info` block to bake the exchange name into the generated code (omitting it from the config). Without it, `exchange` is a required config field:
+## Spec conventions
+
+### Operation naming
+
+The `action` property determines which files an operation ends up in:
+
+```yaml
+operations:
+  sendAccountCreated:       # action: send → aws-client + amqp-client
+    action: send
+  receiveCustomerDeleted:   # action: receive → handlers + amqp-listeners
+    action: receive
+```
+
+By convention, operation names are prefixed with `send`/`receive` to match their action. The template strips this prefix when deriving names, so `sendAccountCreated` produces `accountCreatedTopicArn` and `receiveCustomerDeleted` produces `createCustomerDeletedHandler` / `createCustomerDeletedAmqpListener`.
+
+### AMQP exchange (optional)
+
+Add `x-amqp-exchange` to the `info` block to bake the exchange name into the generated code — it will be emitted as a string literal and omitted from the config. Without it, `exchange` is a required config field:
 
 ```yaml
 info:
@@ -64,7 +103,9 @@ info:
   x-amqp-exchange: account-events
 ```
 
-Routing keys default to the kebab-case operation name minus the `send` prefix (`sendAccountCreated` → `account-created`). Override per message with `x-amqp-routing-key`:
+### AMQP routing keys
+
+Routing keys default to the kebab-case operation name minus the `send`/`receive` prefix (`sendAccountCreated` → `account-created`). Override per message with `x-amqp-routing-key`:
 
 ```yaml
 components:
@@ -72,22 +113,6 @@ components:
     AccountCreated:
       x-amqp-routing-key: accounts.created
 ```
-
-## Spec conventions
-
-### Operation naming
-
-The `action` property determines which file an operation ends up in:
-
-```yaml
-operations:
-  sendAccountCreated:       # action: send → client file
-    action: send
-  receiveCustomerDeleted:   # action: receive → handlers file
-    action: receive
-```
-
-By convention, operation names are prefixed with `send`/`receive` to match their action. The template strips this prefix when deriving parameter and handler names, so `sendAccountCreated` produces `accountCreatedTopicArn` and `receiveCustomerDeleted` produces `createCustomerDeletedHandler`.
 
 ### SNS Subject (optional)
 
