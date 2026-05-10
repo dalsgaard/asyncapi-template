@@ -67,6 +67,6 @@ export default function ({ asyncapi }) {
     if (receiveOps.length === 0)
         return [];
     return [
-        _jsx(FileWithChildren, { name: `${slug}-amqp-handlers.ts`, children: `// Generated — do not edit manually\n\n${generateFile(receiveOps, exchange, `./${slug}`)}` }),
+        _jsx(FileWithChildren, { name: `${slug}-amqp-listeners.ts`, children: `// Generated — do not edit manually\n\n${generateFile(receiveOps, exchange, `./${slug}`)}` }),
     ];
 }

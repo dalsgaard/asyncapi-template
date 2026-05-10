@@ -101,7 +101,7 @@ export default function ({ asyncapi }: { asyncapi: AsyncAPIDocument }) {
   if (receiveOps.length === 0) return [];
 
   return [
-    <FileWithChildren name={`${slug}-amqp-handlers.ts`}>
+    <FileWithChildren name={`${slug}-amqp-listeners.ts`}>
       {`// Generated — do not edit manually\n\n${generateFile(receiveOps, exchange, `./${slug}`)}`}
     </FileWithChildren>,
   ];
